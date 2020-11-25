@@ -13,6 +13,7 @@ import (
 	"github.com/openshift/installer/pkg/types/ovirt"
 )
 
+// TODO extract to platformv2 API
 // MachineSets returns a list of machinesets for a machinepool.
 func MachineSets(clusterID string, config *types.InstallConfig, pool *types.MachinePool, osImage, role,
 	userDataSecret string) ([]*machineapi.MachineSet, error) {

@@ -437,6 +437,7 @@ func validatePlatform(platform *types.Platform, fldPath *field.Path, network *ty
 		})
 	}
 	if platform.Ovirt != nil {
+		// TODO extract to platformv2 API
 		validate(ovirt.Name, platform.Ovirt, func(f *field.Path) field.ErrorList {
 			return ovirtvalidation.ValidatePlatform(platform.Ovirt, f)
 		})
@@ -527,6 +528,7 @@ func validateCloudCredentialsMode(mode types.CredentialsMode, fldPath *field.Pat
 	// validPlatformCredentialsModes is a map from the platform name to a slice of credentials modes that are valid
 	// for the platform. If a platform name is not in the map, then the credentials mode cannot be set for that platform.
 	validPlatformCredentialsModes := map[string][]types.CredentialsMode{
+		// TODO extract to platformv2 API
 		aws.Name:   {types.MintCredentialsMode, types.PassthroughCredentialsMode, types.ManualCredentialsMode},
 		azure.Name: {types.MintCredentialsMode, types.PassthroughCredentialsMode, types.ManualCredentialsMode},
 		gcp.Name:   {types.MintCredentialsMode, types.PassthroughCredentialsMode, types.ManualCredentialsMode},

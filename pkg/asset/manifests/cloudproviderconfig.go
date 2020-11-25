@@ -85,6 +85,7 @@ func (cpc *CloudProviderConfig) Generate(dependencies asset.Parents) error {
 
 	switch installConfig.Config.Platform.Name() {
 	case libvirttypes.Name, nonetypes.Name, baremetaltypes.Name, ovirttypes.Name:
+		// TODO extract to platformv2 API
 		return nil
 	case awstypes.Name:
 		// Store the additional trust bundle in the ca-bundle.pem key if the cluster is being installed on a C2S region.

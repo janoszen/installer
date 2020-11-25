@@ -114,6 +114,7 @@ func (p *MachinePoolPlatform) Name() string {
 	case p.VSphere != nil:
 		return vsphere.Name
 	case p.Ovirt != nil:
+		// TODO extract to platformv2 API
 		return ovirt.Name
 	default:
 		return ""

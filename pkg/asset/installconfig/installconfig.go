@@ -14,8 +14,8 @@ import (
 	icazure "github.com/openshift/installer/pkg/asset/installconfig/azure"
 	icgcp "github.com/openshift/installer/pkg/asset/installconfig/gcp"
 	icopenstack "github.com/openshift/installer/pkg/asset/installconfig/openstack"
-	icovirt "github.com/openshift/installer/pkg/asset/installconfig/ovirt"
 	icvsphere "github.com/openshift/installer/pkg/asset/installconfig/vsphere"
+	"github.com/openshift/installer/pkg/platformv2"
 	"github.com/openshift/installer/pkg/types"
 	"github.com/openshift/installer/pkg/types/conversion"
 	"github.com/openshift/installer/pkg/types/defaults"
@@ -161,6 +161,13 @@ func (a *InstallConfig) finish(filename string) error {
 }
 
 func (a *InstallConfig) platformValidation() error {
+	p, err := platformv2.Get(a)
+	if err == nil {
+		return p.Validate(a)
+	} else if !errors.Is(err, platformv2.NotRegistered) {
+		return err
+	}
+	//TODO refactor to platformv2 API
 	if a.Config.Platform.Azure != nil {
 		client, err := a.Azure.Client()
 		if err != nil {
@@ -180,9 +187,6 @@ func (a *InstallConfig) platformValidation() error {
 	}
 	if a.Config.Platform.VSphere != nil {
 		return icvsphere.Validate(a.Config)
-	}
-	if a.Config.Platform.Ovirt != nil {
-		return icovirt.Validate(a.Config)
 	}
 	if a.Config.Platform.OpenStack != nil {
 		return icopenstack.Validate(a.Config)

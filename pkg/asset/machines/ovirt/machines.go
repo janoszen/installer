@@ -15,6 +15,7 @@ import (
 	ovirtprovider "github.com/openshift/cluster-api-provider-ovirt/pkg/apis/ovirtprovider/v1beta1"
 )
 
+// TODO extract to platformv2 API
 // Machines returns a list of machines for a machinepool.
 func Machines(clusterID string, config *types.InstallConfig, pool *types.MachinePool, osImage, role, userDataSecret string) ([]machineapi.Machine, error) {
 	if configPlatform := config.Platform.Name(); configPlatform != ovirt.Name {

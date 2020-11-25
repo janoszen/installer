@@ -81,6 +81,7 @@ func Destroy(dir string) (err error) {
 			return errors.Wrapf(err, "Failed to delete glance image %s", imageName)
 		}
 	case ovirt.Name:
+		// TODO extract to platformv2 API
 		extraArgs = append(extraArgs, "-target=module.template.ovirt_vm.tmp_import_vm")
 		extraArgs = append(extraArgs, "-target=module.template.ovirt_image_transfer.releaseimage")
 	}

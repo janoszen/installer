@@ -153,6 +153,7 @@ func (i *Infrastructure) Generate(dependencies asset.Parents) error {
 			}
 		}
 	case ovirt.Name:
+		// TODO extract to platformv2 API
 		config.Spec.PlatformSpec.Type = configv1.OvirtPlatformType
 		config.Status.PlatformStatus.Ovirt = &configv1.OvirtPlatformStatus{
 			APIServerInternalIP: installConfig.Config.Ovirt.APIVIP,

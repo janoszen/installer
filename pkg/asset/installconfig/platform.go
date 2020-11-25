@@ -5,7 +5,7 @@ import (
 	"sort"
 
 	"github.com/pkg/errors"
-	survey "gopkg.in/AlecAivazis/survey.v1"
+	"gopkg.in/AlecAivazis/survey.v1"
 
 	"github.com/openshift/installer/pkg/asset"
 	awsconfig "github.com/openshift/installer/pkg/asset/installconfig/aws"
@@ -14,17 +14,15 @@ import (
 	gcpconfig "github.com/openshift/installer/pkg/asset/installconfig/gcp"
 	libvirtconfig "github.com/openshift/installer/pkg/asset/installconfig/libvirt"
 	openstackconfig "github.com/openshift/installer/pkg/asset/installconfig/openstack"
-	ovirtconfig "github.com/openshift/installer/pkg/asset/installconfig/ovirt"
 	vsphereconfig "github.com/openshift/installer/pkg/asset/installconfig/vsphere"
+	"github.com/openshift/installer/pkg/platformv2"
 	"github.com/openshift/installer/pkg/types"
 	"github.com/openshift/installer/pkg/types/aws"
 	"github.com/openshift/installer/pkg/types/azure"
 	"github.com/openshift/installer/pkg/types/baremetal"
 	"github.com/openshift/installer/pkg/types/gcp"
 	"github.com/openshift/installer/pkg/types/libvirt"
-	"github.com/openshift/installer/pkg/types/none"
 	"github.com/openshift/installer/pkg/types/openstack"
-	"github.com/openshift/installer/pkg/types/ovirt"
 	"github.com/openshift/installer/pkg/types/vsphere"
 )
 
@@ -45,6 +43,16 @@ func (a *platform) Dependencies() []asset.Asset {
 func (a *platform) Generate(asset.Parents) error {
 	platform, err := a.queryUserForPlatform()
 	if err != nil {
+		return err
+	}
+
+	p, err := platformv2.GetByName(platform)
+	if err == nil {
+		if err := p.AddToInstallConfigPlatform(&a.Platform); err != nil {
+			return err
+		}
+		return nil
+	} else if !errors.Is(err, platformv2.NotRegistered) {
 		return err
 	}
 
@@ -74,15 +82,8 @@ func (a *platform) Generate(asset.Parents) error {
 		if err != nil {
 			return err
 		}
-	case none.Name:
-		a.None = &none.Platform{}
 	case openstack.Name:
 		a.OpenStack, err = openstackconfig.Platform()
-		if err != nil {
-			return err
-		}
-	case ovirt.Name:
-		a.Ovirt, err = ovirtconfig.Platform()
 		if err != nil {
 			return err
 		}

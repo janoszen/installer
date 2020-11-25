@@ -14,19 +14,17 @@ import (
 	"github.com/openshift/installer/pkg/asset/cluster/gcp"
 	"github.com/openshift/installer/pkg/asset/cluster/libvirt"
 	"github.com/openshift/installer/pkg/asset/cluster/openstack"
-	"github.com/openshift/installer/pkg/asset/cluster/ovirt"
 	"github.com/openshift/installer/pkg/asset/cluster/vsphere"
 	"github.com/openshift/installer/pkg/asset/ignition/bootstrap"
 	"github.com/openshift/installer/pkg/asset/installconfig"
+	"github.com/openshift/installer/pkg/platformv2"
 	"github.com/openshift/installer/pkg/types"
 	awstypes "github.com/openshift/installer/pkg/types/aws"
 	azuretypes "github.com/openshift/installer/pkg/types/azure"
 	baremetaltypes "github.com/openshift/installer/pkg/types/baremetal"
 	gcptypes "github.com/openshift/installer/pkg/types/gcp"
 	libvirttypes "github.com/openshift/installer/pkg/types/libvirt"
-	nonetypes "github.com/openshift/installer/pkg/types/none"
 	openstacktypes "github.com/openshift/installer/pkg/types/openstack"
-	ovirttypes "github.com/openshift/installer/pkg/types/ovirt"
 	vspheretypes "github.com/openshift/installer/pkg/types/vsphere"
 )
 
@@ -68,26 +66,33 @@ func (m *Metadata) Generate(parents asset.Parents) (err error) {
 		InfraID:     clusterID.InfraID,
 	}
 
-	switch installConfig.Config.Platform.Name() {
-	case awstypes.Name:
-		metadata.ClusterPlatformMetadata.AWS = aws.Metadata(clusterID.UUID, clusterID.InfraID, installConfig.Config)
-	case libvirttypes.Name:
-		metadata.ClusterPlatformMetadata.Libvirt = libvirt.Metadata(installConfig.Config)
-	case openstacktypes.Name:
-		metadata.ClusterPlatformMetadata.OpenStack = openstack.Metadata(clusterID.InfraID, installConfig.Config)
-	case azuretypes.Name:
-		metadata.ClusterPlatformMetadata.Azure = azure.Metadata(installConfig.Config)
-	case gcptypes.Name:
-		metadata.ClusterPlatformMetadata.GCP = gcp.Metadata(installConfig.Config)
-	case baremetaltypes.Name:
-		metadata.ClusterPlatformMetadata.BareMetal = baremetal.Metadata(installConfig.Config)
-	case ovirttypes.Name:
-		metadata.ClusterPlatformMetadata.Ovirt = ovirt.Metadata(installConfig.Config)
-	case vspheretypes.Name:
-		metadata.ClusterPlatformMetadata.VSphere = vsphere.Metadata(installConfig.Config)
-	case nonetypes.Name:
-	default:
-		return errors.Errorf("no known platform")
+	p, err := platformv2.Get(installConfig)
+	if err == nil {
+		if err := p.Metadata(metadata, installConfig); err != nil {
+			return err
+		}
+	} else if !errors.Is(err, platformv2.NotRegistered) {
+		return err
+	} else {
+		//TODO refactor to platformv2 API
+		switch installConfig.Config.Platform.Name() {
+		case awstypes.Name:
+			metadata.ClusterPlatformMetadata.AWS = aws.Metadata(clusterID.UUID, clusterID.InfraID, installConfig.Config)
+		case libvirttypes.Name:
+			metadata.ClusterPlatformMetadata.Libvirt = libvirt.Metadata(installConfig.Config)
+		case openstacktypes.Name:
+			metadata.ClusterPlatformMetadata.OpenStack = openstack.Metadata(clusterID.InfraID, installConfig.Config)
+		case azuretypes.Name:
+			metadata.ClusterPlatformMetadata.Azure = azure.Metadata(installConfig.Config)
+		case gcptypes.Name:
+			metadata.ClusterPlatformMetadata.GCP = gcp.Metadata(installConfig.Config)
+		case baremetaltypes.Name:
+			metadata.ClusterPlatformMetadata.BareMetal = baremetal.Metadata(installConfig.Config)
+		case vspheretypes.Name:
+			metadata.ClusterPlatformMetadata.VSphere = vsphere.Metadata(installConfig.Config)
+		default:
+			return errors.Errorf("no known platform")
+		}
 	}
 
 	data, err := json.Marshal(metadata)

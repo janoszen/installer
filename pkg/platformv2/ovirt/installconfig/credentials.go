@@ -1,4 +1,4 @@
-package ovirt
+package installconfig
 
 import (
 	"crypto/tls"

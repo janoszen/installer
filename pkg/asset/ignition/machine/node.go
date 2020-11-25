@@ -31,6 +31,7 @@ func pointerIgnitionConfig(installConfig *types.InstallConfig, rootCA []byte, ro
 	case openstacktypes.Name:
 		ignitionHost = net.JoinHostPort(installConfig.OpenStack.APIVIP, "22623")
 	case ovirttypes.Name:
+		// TODO extract to platformv2 API
 		ignitionHost = net.JoinHostPort(installConfig.Ovirt.APIVIP, "22623")
 	case vspheretypes.Name:
 		if installConfig.VSphere.APIVIP != "" {

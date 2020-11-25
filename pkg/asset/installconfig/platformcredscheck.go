@@ -9,7 +9,7 @@ import (
 	"github.com/openshift/installer/pkg/asset"
 	gcpconfig "github.com/openshift/installer/pkg/asset/installconfig/gcp"
 	openstackconfig "github.com/openshift/installer/pkg/asset/installconfig/openstack"
-	ovirtconfig "github.com/openshift/installer/pkg/asset/installconfig/ovirt"
+	ovirtconfig "github.com/openshift/installer/pkg/platformv2/ovirt/installconfig"
 	"github.com/openshift/installer/pkg/types/aws"
 	"github.com/openshift/installer/pkg/types/azure"
 	"github.com/openshift/installer/pkg/types/baremetal"
@@ -67,6 +67,7 @@ func (a *PlatformCredsCheck) Generate(dependencies asset.Parents) error {
 			return errors.Wrap(err, "creating Azure session")
 		}
 	case ovirt.Name:
+		// TODO extract to platformv2 API
 		con, err := ovirtconfig.NewConnection()
 		if err != nil {
 			return errors.Wrap(err, "creating Engine connection")

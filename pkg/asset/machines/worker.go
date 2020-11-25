@@ -42,9 +42,10 @@ import (
 	"github.com/openshift/installer/pkg/asset/machines/libvirt"
 	"github.com/openshift/installer/pkg/asset/machines/machineconfig"
 	"github.com/openshift/installer/pkg/asset/machines/openstack"
-	"github.com/openshift/installer/pkg/asset/machines/ovirt"
 	"github.com/openshift/installer/pkg/asset/machines/vsphere"
 	"github.com/openshift/installer/pkg/asset/rhcos"
+	"github.com/openshift/installer/pkg/platformv2"
+	"github.com/openshift/installer/pkg/platformv2/abstract"
 	rhcosutils "github.com/openshift/installer/pkg/rhcos"
 	"github.com/openshift/installer/pkg/types"
 	awstypes "github.com/openshift/installer/pkg/types/aws"
@@ -54,9 +55,7 @@ import (
 	baremetaltypes "github.com/openshift/installer/pkg/types/baremetal"
 	gcptypes "github.com/openshift/installer/pkg/types/gcp"
 	libvirttypes "github.com/openshift/installer/pkg/types/libvirt"
-	nonetypes "github.com/openshift/installer/pkg/types/none"
 	openstacktypes "github.com/openshift/installer/pkg/types/openstack"
-	ovirttypes "github.com/openshift/installer/pkg/types/ovirt"
 	vspheretypes "github.com/openshift/installer/pkg/types/vsphere"
 )
 
@@ -115,20 +114,6 @@ func defaultOpenStackMachinePoolPlatform(flavor string) openstacktypes.MachinePo
 
 func defaultBareMetalMachinePoolPlatform() baremetaltypes.MachinePool {
 	return baremetaltypes.MachinePool{}
-}
-
-func defaultOvirtMachinePoolPlatform() ovirttypes.MachinePool {
-	return ovirttypes.MachinePool{
-		CPU: &ovirttypes.CPU{
-			Cores:   4,
-			Sockets: 1,
-		},
-		MemoryMB: 16348,
-		OSDisk: &ovirttypes.Disk{
-			SizeGB: 120,
-		},
-		VMType: ovirttypes.VMTypeServer,
-	}
 }
 
 func defaultVSphereMachinePoolPlatform() vspheretypes.MachinePool {
@@ -213,185 +198,183 @@ func (w *Worker) Generate(dependencies asset.Parents) error {
 			}
 			machineConfigs = append(machineConfigs, ignFIPS)
 		}
-		switch ic.Platform.Name() {
-		case awstypes.Name:
-			subnets := map[string]string{}
-			if len(ic.Platform.AWS.Subnets) > 0 {
-				subnetMeta, err := installConfig.AWS.PrivateSubnets(ctx)
-				if err != nil {
-					return err
-				}
-				for id, subnet := range subnetMeta {
-					subnets[subnet.Zone] = id
-				}
+		p, err := platformv2.Get(installConfig)
+		if err == nil {
+			ipi, err := p.GetIPI()
+			if err == nil {
+				err = ipi.AddWorkerMachines(ic, &pool, rhcosImage, clusterID, machineSets)
+			} else if !errors.Is(err, abstract.NotAnIPIPlatform) {
+				return err
 			}
-
-			mpool := defaultAWSMachinePoolPlatform()
-
-			osImage := strings.SplitN(string(*rhcosImage), ",", 2)
-			osImageID := osImage[0]
-			if len(osImage) == 2 {
-				osImageID = "" // the AMI will be generated later on
-			}
-			mpool.AMIID = osImageID
-
-			mpool.Set(ic.Platform.AWS.DefaultMachinePlatform)
-			mpool.Set(pool.Platform.AWS)
-			if len(mpool.Zones) == 0 {
-				if len(subnets) > 0 {
-					for zone := range subnets {
-						mpool.Zones = append(mpool.Zones, zone)
-					}
-				} else {
-					mpool.Zones, err = installConfig.AWS.AvailabilityZones(ctx)
+			// Non-IPI platforms have an empty machineset
+		} else if !errors.Is(err, platformv2.NotRegistered) {
+			return err
+		} else {
+			//TODO use platformv2 API
+			switch ic.Platform.Name() {
+			case awstypes.Name:
+				subnets := map[string]string{}
+				if len(ic.Platform.AWS.Subnets) > 0 {
+					subnetMeta, err := installConfig.AWS.PrivateSubnets(ctx)
 					if err != nil {
 						return err
 					}
+					for id, subnet := range subnetMeta {
+						subnets[subnet.Zone] = id
+					}
 				}
-			}
-			if mpool.InstanceType == "" {
-				mpool.InstanceType, err = aws.PreferredInstanceType(ctx, installConfig.AWS, awsDefaultWorkerMachineTypes(installConfig.Config.Platform.AWS.Region), mpool.Zones)
+
+				mpool := defaultAWSMachinePoolPlatform()
+
+				osImage := strings.SplitN(string(*rhcosImage), ",", 2)
+				osImageID := osImage[0]
+				if len(osImage) == 2 {
+					osImageID = "" // the AMI will be generated later on
+				}
+				mpool.AMIID = osImageID
+
+				mpool.Set(ic.Platform.AWS.DefaultMachinePlatform)
+				mpool.Set(pool.Platform.AWS)
+				if len(mpool.Zones) == 0 {
+					if len(subnets) > 0 {
+						for zone := range subnets {
+							mpool.Zones = append(mpool.Zones, zone)
+						}
+					} else {
+						mpool.Zones, err = installConfig.AWS.AvailabilityZones(ctx)
+						if err != nil {
+							return err
+						}
+					}
+				}
+				if mpool.InstanceType == "" {
+					mpool.InstanceType, err = aws.PreferredInstanceType(ctx, installConfig.AWS, awsDefaultWorkerMachineTypes(installConfig.Config.Platform.AWS.Region), mpool.Zones)
+					if err != nil {
+						logrus.Warn(errors.Wrap(err, "failed to find default instance type"))
+						mpool.InstanceType = awsDefaultWorkerMachineTypes(installConfig.Config.Platform.AWS.Region)[0]
+					}
+				}
+				pool.Platform.AWS = &mpool
+				sets, err := aws.MachineSets(
+					clusterID.InfraID,
+					installConfig.Config.Platform.AWS.Region,
+					subnets,
+					&pool,
+					"worker",
+					"worker-user-data",
+					installConfig.Config.Platform.AWS.UserTags,
+				)
 				if err != nil {
-					logrus.Warn(errors.Wrap(err, "failed to find default instance type"))
-					mpool.InstanceType = awsDefaultWorkerMachineTypes(installConfig.Config.Platform.AWS.Region)[0]
+					return errors.Wrap(err, "failed to create worker machine objects")
 				}
-			}
-			pool.Platform.AWS = &mpool
-			sets, err := aws.MachineSets(
-				clusterID.InfraID,
-				installConfig.Config.Platform.AWS.Region,
-				subnets,
-				&pool,
-				"worker",
-				"worker-user-data",
-				installConfig.Config.Platform.AWS.UserTags,
-			)
-			if err != nil {
-				return errors.Wrap(err, "failed to create worker machine objects")
-			}
-			for _, set := range sets {
-				machineSets = append(machineSets, set)
-			}
-		case azuretypes.Name:
-			mpool := defaultAzureMachinePoolPlatform()
-			mpool.InstanceType = azuredefaults.ComputeInstanceType(installConfig.Config.Platform.Azure.Region)
-			mpool.Set(ic.Platform.Azure.DefaultMachinePlatform)
-			mpool.Set(pool.Platform.Azure)
-			if len(mpool.Zones) == 0 {
-				session, err := installConfig.Azure.Session()
+				for _, set := range sets {
+					machineSets = append(machineSets, set)
+				}
+			case azuretypes.Name:
+				mpool := defaultAzureMachinePoolPlatform()
+				mpool.InstanceType = azuredefaults.ComputeInstanceType(installConfig.Config.Platform.Azure.Region)
+				mpool.Set(ic.Platform.Azure.DefaultMachinePlatform)
+				mpool.Set(pool.Platform.Azure)
+				if len(mpool.Zones) == 0 {
+					session, err := installConfig.Azure.Session()
+					if err != nil {
+						return errors.Wrap(err, "failed to fetch session for availability zones")
+					}
+					azs, err := azure.AvailabilityZones(session, ic.Platform.Azure.Region, mpool.InstanceType)
+					if err != nil {
+						return errors.Wrap(err, "failed to fetch availability zones")
+					}
+					mpool.Zones = azs
+					if len(azs) == 0 {
+						// if no azs are given we set to []string{""} for convenience over later operations.
+						// It means no-zoned for the machine API
+						mpool.Zones = []string{""}
+					}
+				}
+
+				pool.Platform.Azure = &mpool
+				sets, err := azure.MachineSets(clusterID.InfraID, ic, &pool, string(*rhcosImage), "worker", "worker-user-data")
 				if err != nil {
-					return errors.Wrap(err, "failed to fetch session for availability zones")
+					return errors.Wrap(err, "failed to create worker machine objects")
 				}
-				azs, err := azure.AvailabilityZones(session, ic.Platform.Azure.Region, mpool.InstanceType)
+				for _, set := range sets {
+					machineSets = append(machineSets, set)
+				}
+			case baremetaltypes.Name:
+				mpool := defaultBareMetalMachinePoolPlatform()
+				mpool.Set(ic.Platform.BareMetal.DefaultMachinePlatform)
+				mpool.Set(pool.Platform.BareMetal)
+				pool.Platform.BareMetal = &mpool
+				sets, err := baremetal.MachineSets(clusterID.InfraID, ic, &pool, string(*rhcosImage), "worker", "worker-user-data")
 				if err != nil {
-					return errors.Wrap(err, "failed to fetch availability zones")
+					return errors.Wrap(err, "failed to create worker machine objects")
 				}
-				mpool.Zones = azs
-				if len(azs) == 0 {
-					// if no azs are given we set to []string{""} for convenience over later operations.
-					// It means no-zoned for the machine API
-					mpool.Zones = []string{""}
+				for _, set := range sets {
+					machineSets = append(machineSets, set)
 				}
-			}
-
-			pool.Platform.Azure = &mpool
-			sets, err := azure.MachineSets(clusterID.InfraID, ic, &pool, string(*rhcosImage), "worker", "worker-user-data")
-			if err != nil {
-				return errors.Wrap(err, "failed to create worker machine objects")
-			}
-			for _, set := range sets {
-				machineSets = append(machineSets, set)
-			}
-		case baremetaltypes.Name:
-			mpool := defaultBareMetalMachinePoolPlatform()
-			mpool.Set(ic.Platform.BareMetal.DefaultMachinePlatform)
-			mpool.Set(pool.Platform.BareMetal)
-			pool.Platform.BareMetal = &mpool
-			sets, err := baremetal.MachineSets(clusterID.InfraID, ic, &pool, string(*rhcosImage), "worker", "worker-user-data")
-			if err != nil {
-				return errors.Wrap(err, "failed to create worker machine objects")
-			}
-			for _, set := range sets {
-				machineSets = append(machineSets, set)
-			}
-		case gcptypes.Name:
-			mpool := defaultGCPMachinePoolPlatform()
-			mpool.Set(ic.Platform.GCP.DefaultMachinePlatform)
-			mpool.Set(pool.Platform.GCP)
-			if len(mpool.Zones) == 0 {
-				azs, err := gcp.AvailabilityZones(ic.Platform.GCP.ProjectID, ic.Platform.GCP.Region)
+			case gcptypes.Name:
+				mpool := defaultGCPMachinePoolPlatform()
+				mpool.Set(ic.Platform.GCP.DefaultMachinePlatform)
+				mpool.Set(pool.Platform.GCP)
+				if len(mpool.Zones) == 0 {
+					azs, err := gcp.AvailabilityZones(ic.Platform.GCP.ProjectID, ic.Platform.GCP.Region)
+					if err != nil {
+						return errors.Wrap(err, "failed to fetch availability zones")
+					}
+					mpool.Zones = azs
+				}
+				pool.Platform.GCP = &mpool
+				sets, err := gcp.MachineSets(clusterID.InfraID, ic, &pool, string(*rhcosImage), "worker", "worker-user-data")
 				if err != nil {
-					return errors.Wrap(err, "failed to fetch availability zones")
+					return errors.Wrap(err, "failed to create worker machine objects")
 				}
-				mpool.Zones = azs
-			}
-			pool.Platform.GCP = &mpool
-			sets, err := gcp.MachineSets(clusterID.InfraID, ic, &pool, string(*rhcosImage), "worker", "worker-user-data")
-			if err != nil {
-				return errors.Wrap(err, "failed to create worker machine objects")
-			}
-			for _, set := range sets {
-				machineSets = append(machineSets, set)
-			}
-		case libvirttypes.Name:
-			mpool := defaultLibvirtMachinePoolPlatform()
-			mpool.Set(ic.Platform.Libvirt.DefaultMachinePlatform)
-			mpool.Set(pool.Platform.Libvirt)
-			pool.Platform.Libvirt = &mpool
-			sets, err := libvirt.MachineSets(clusterID.InfraID, ic, &pool, "worker", "worker-user-data")
-			if err != nil {
-				return errors.Wrap(err, "failed to create worker machine objects")
-			}
-			for _, set := range sets {
-				machineSets = append(machineSets, set)
-			}
-		case openstacktypes.Name:
-			mpool := defaultOpenStackMachinePoolPlatform(ic.Platform.OpenStack.FlavorName)
-			mpool.Set(ic.Platform.OpenStack.DefaultMachinePlatform)
-			mpool.Set(pool.Platform.OpenStack)
-			pool.Platform.OpenStack = &mpool
+				for _, set := range sets {
+					machineSets = append(machineSets, set)
+				}
+			case libvirttypes.Name:
+				mpool := defaultLibvirtMachinePoolPlatform()
+				mpool.Set(ic.Platform.Libvirt.DefaultMachinePlatform)
+				mpool.Set(pool.Platform.Libvirt)
+				pool.Platform.Libvirt = &mpool
+				sets, err := libvirt.MachineSets(clusterID.InfraID, ic, &pool, "worker", "worker-user-data")
+				if err != nil {
+					return errors.Wrap(err, "failed to create worker machine objects")
+				}
+				for _, set := range sets {
+					machineSets = append(machineSets, set)
+				}
+			case openstacktypes.Name:
+				mpool := defaultOpenStackMachinePoolPlatform(ic.Platform.OpenStack.FlavorName)
+				mpool.Set(ic.Platform.OpenStack.DefaultMachinePlatform)
+				mpool.Set(pool.Platform.OpenStack)
+				pool.Platform.OpenStack = &mpool
 
-			imageName, _ := rhcosutils.GenerateOpenStackImageName(string(*rhcosImage), clusterID.InfraID)
+				imageName, _ := rhcosutils.GenerateOpenStackImageName(string(*rhcosImage), clusterID.InfraID)
 
-			sets, err := openstack.MachineSets(clusterID.InfraID, ic, &pool, imageName, "worker", "worker-user-data", &openstackclientconfig.ClientOpts{})
-			if err != nil {
-				return errors.Wrap(err, "failed to create worker machine objects")
-			}
-			for _, set := range sets {
-				machineSets = append(machineSets, set)
-			}
-		case vspheretypes.Name:
-			mpool := defaultVSphereMachinePoolPlatform()
-			mpool.Set(ic.Platform.VSphere.DefaultMachinePlatform)
-			mpool.Set(pool.Platform.VSphere)
-			pool.Platform.VSphere = &mpool
-			templateName := clusterID.InfraID + "-rhcos"
+				sets, err := openstack.MachineSets(clusterID.InfraID, ic, &pool, imageName, "worker", "worker-user-data", &openstackclientconfig.ClientOpts{})
+				if err != nil {
+					return errors.Wrap(err, "failed to create worker machine objects")
+				}
+				for _, set := range sets {
+					machineSets = append(machineSets, set)
+				}
+			case vspheretypes.Name:
+				mpool := defaultVSphereMachinePoolPlatform()
+				mpool.Set(ic.Platform.VSphere.DefaultMachinePlatform)
+				mpool.Set(pool.Platform.VSphere)
+				pool.Platform.VSphere = &mpool
+				templateName := clusterID.InfraID + "-rhcos"
 
-			sets, err := vsphere.MachineSets(clusterID.InfraID, ic, &pool, templateName, "worker", "worker-user-data")
-			if err != nil {
-				return errors.Wrap(err, "failed to create worker machine objects")
+				sets, err := vsphere.MachineSets(clusterID.InfraID, ic, &pool, templateName, "worker", "worker-user-data")
+				if err != nil {
+					return errors.Wrap(err, "failed to create worker machine objects")
+				}
+				for _, set := range sets {
+					machineSets = append(machineSets, set)
+				}
+			default:
+				return fmt.Errorf("invalid Platform")
 			}
-			for _, set := range sets {
-				machineSets = append(machineSets, set)
-			}
-		case ovirttypes.Name:
-			mpool := defaultOvirtMachinePoolPlatform()
-			mpool.Set(ic.Platform.Ovirt.DefaultMachinePlatform)
-			mpool.Set(pool.Platform.Ovirt)
-			pool.Platform.Ovirt = &mpool
-
-			imageName, _ := rhcosutils.GenerateOpenStackImageName(string(*rhcosImage), clusterID.InfraID)
-
-			sets, err := ovirt.MachineSets(clusterID.InfraID, ic, &pool, imageName, "worker", "worker-user-data")
-			if err != nil {
-				return errors.Wrap(err, "failed to create worker machine objects for ovirt provider")
-			}
-			for _, set := range sets {
-				machineSets = append(machineSets, set)
-			}
-		case nonetypes.Name:
-		default:
-			return fmt.Errorf("invalid Platform")
 		}
 	}
 

@@ -76,6 +76,7 @@ func (a *PlatformProvisionCheck) Generate(dependencies asset.Parents) error {
 			return err
 		}
 	case aws.Name, libvirt.Name, none.Name, openstack.Name, ovirt.Name:
+		// TODO extract to platformv2 API
 		// no special provisioning requirements to check
 	default:
 		err = fmt.Errorf("unknown platform type %q", platform)

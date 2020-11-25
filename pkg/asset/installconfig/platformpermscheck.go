@@ -84,6 +84,7 @@ func (a *PlatformPermsCheck) Generate(dependencies asset.Parents) error {
 			return errors.Wrap(err, "failed to validate services in this project")
 		}
 	case azure.Name, baremetal.Name, libvirt.Name, none.Name, openstack.Name, ovirt.Name, vsphere.Name:
+		// TODO extract to platformv2 API
 		// no permissions to check
 	default:
 		err = fmt.Errorf("unknown platform type %q", platform)

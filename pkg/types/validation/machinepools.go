@@ -104,6 +104,7 @@ func validateMachinePoolPlatform(platform *types.Platform, p *types.MachinePoolP
 		validate(vsphere.Name, p.VSphere, func(f *field.Path) field.ErrorList { return vspherevalidation.ValidateMachinePool(p.VSphere, f) })
 	}
 	if p.Ovirt != nil {
+		// TODO extract to platformv2 API
 		validate(ovirt.Name, p.Ovirt, func(f *field.Path) field.ErrorList { return ovirtvalidation.ValidateMachinePool(p.Ovirt, f) })
 	}
 	return allErrs

@@ -14,6 +14,7 @@ import (
 
 	"github.com/openshift/installer/pkg/asset"
 	"github.com/openshift/installer/pkg/asset/installconfig"
+	"github.com/openshift/installer/pkg/platformv2"
 	"github.com/openshift/installer/pkg/types/aws"
 	"github.com/openshift/installer/pkg/types/azure"
 	"github.com/openshift/installer/pkg/types/gcp"
@@ -132,6 +133,19 @@ func createNoProxy(installConfig *installconfig.InstallConfig, network *Networki
 
 	platform := installConfig.Config.Platform.Name()
 
+	p, err := platformv2.GetByName(platform)
+	if err == nil {
+		if ips := p.GetNoProxyIPs(); len(ips) > 0 {
+			set.Insert(ips...)
+		}
+		if hosts := p.GetNoProxyHostnames(); len(hosts) > 0 {
+			set.Insert(hosts...)
+		}
+	} else if err != platformv2.NotRegistered {
+		return "", err
+	}
+
+	// TODO: move to platformv2 API
 	// FIXME: The cluster-network-operator duplicates this code in pkg/util/proxyconfig/no_proxy.go,
 	//  if altering this list of platforms, you must ALSO alter the code in cluster-network-operator.
 	switch platform {
@@ -139,7 +153,7 @@ func createNoProxy(installConfig *installconfig.InstallConfig, network *Networki
 		set.Insert("169.254.169.254")
 	}
 
-	// TODO: Add support for additional cloud providers.
+	// TODO: move to platformv2 API
 	if platform == aws.Name {
 		region := installConfig.Config.AWS.Region
 		if region == "us-east-1" {
@@ -149,6 +163,7 @@ func createNoProxy(installConfig *installconfig.InstallConfig, network *Networki
 		}
 	}
 
+	// TODO: move to platformv2 API
 	// From https://cloud.google.com/vpc/docs/special-configurations add GCP metadata.
 	// "metadata.google.internal." added due to https://bugzilla.redhat.com/show_bug.cgi?id=1754049
 	if platform == gcp.Name {

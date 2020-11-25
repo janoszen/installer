@@ -223,6 +223,7 @@ func extractHostAddresses(config *types.InstallConfig, tfstate *terraform.State)
 			logrus.Error(err)
 		}
 	case ovirttypes.Name:
+		// TODO extract to platformv2 API
 		bootstrap, err := gatherovirt.BootstrapIP(tfstate)
 		if err != nil {
 			return bootstrap, port, masters, err

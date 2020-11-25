@@ -11,7 +11,6 @@ import (
 	igntypes "github.com/coreos/ignition/v2/config/v3_1/types"
 	gcpprovider "github.com/openshift/cluster-api-provider-gcp/pkg/apis/gcpprovider/v1beta1"
 	libvirtprovider "github.com/openshift/cluster-api-provider-libvirt/pkg/apis/libvirtproviderconfig/v1beta1"
-	ovirtprovider "github.com/openshift/cluster-api-provider-ovirt/pkg/apis/ovirtprovider/v1beta1"
 	vsphereprovider "github.com/openshift/machine-api-operator/pkg/apis/vsphereprovider/v1beta1"
 	"github.com/pkg/errors"
 	"github.com/sirupsen/logrus"
@@ -28,10 +27,11 @@ import (
 	awsconfig "github.com/openshift/installer/pkg/asset/installconfig/aws"
 	gcpconfig "github.com/openshift/installer/pkg/asset/installconfig/gcp"
 	openstackconfig "github.com/openshift/installer/pkg/asset/installconfig/openstack"
-	ovirtconfig "github.com/openshift/installer/pkg/asset/installconfig/ovirt"
 	"github.com/openshift/installer/pkg/asset/machines"
 	"github.com/openshift/installer/pkg/asset/openshiftinstall"
 	"github.com/openshift/installer/pkg/asset/rhcos"
+	refactoredPlatform "github.com/openshift/installer/pkg/platformv2"
+	"github.com/openshift/installer/pkg/platformv2/abstract"
 	rhcospkg "github.com/openshift/installer/pkg/rhcos"
 	"github.com/openshift/installer/pkg/tfvars"
 	awstfvars "github.com/openshift/installer/pkg/tfvars/aws"
@@ -40,7 +40,6 @@ import (
 	gcptfvars "github.com/openshift/installer/pkg/tfvars/gcp"
 	libvirttfvars "github.com/openshift/installer/pkg/tfvars/libvirt"
 	openstacktfvars "github.com/openshift/installer/pkg/tfvars/openstack"
-	ovirttfvars "github.com/openshift/installer/pkg/tfvars/ovirt"
 	vspheretfvars "github.com/openshift/installer/pkg/tfvars/vsphere"
 	"github.com/openshift/installer/pkg/types"
 	"github.com/openshift/installer/pkg/types/aws"
@@ -48,9 +47,7 @@ import (
 	"github.com/openshift/installer/pkg/types/baremetal"
 	"github.com/openshift/installer/pkg/types/gcp"
 	"github.com/openshift/installer/pkg/types/libvirt"
-	"github.com/openshift/installer/pkg/types/none"
 	"github.com/openshift/installer/pkg/types/openstack"
-	"github.com/openshift/installer/pkg/types/ovirt"
 	"github.com/openshift/installer/pkg/types/vsphere"
 )
 
@@ -110,10 +107,6 @@ func (t *TerraformVariables) Generate(parents asset.Parents) error {
 	parents.Get(clusterID, installConfig, bootstrapIgnAsset, masterIgnAsset, mastersAsset, workersAsset, rhcosImage, rhcosBootstrapImage, ironicCreds)
 
 	platform := installConfig.Config.Platform.Name()
-	switch platform {
-	case none.Name:
-		return errors.Errorf("cannot create the cluster because %q is a UPI platform", platform)
-	}
 
 	masterIgn := string(masterIgnAsset.Files()[0].Data)
 	bootstrapIgn, err := injectInstallInfo(bootstrapIgnAsset.Files()[0].Data)
@@ -164,6 +157,30 @@ func (t *TerraformVariables) Generate(parents asset.Parents) error {
 
 	if masterCount == 0 {
 		return errors.Errorf("master slice cannot be empty")
+	}
+
+	p, err := refactoredPlatform.Get(installConfig)
+	if err == nil {
+		if ipi, err := p.GetIPI(); err == nil {
+			data, err := ipi.CreateTFVars(
+				installConfig,
+				mastersAsset,
+				rhcosImage,
+				clusterID,
+			)
+			if err != nil {
+				return errors.Wrapf(err, "failed to get %s Terraform variables", platform)
+			}
+			t.FileList = append(t.FileList, &asset.File{
+				Filename: fmt.Sprintf(TfPlatformVarsFileName, platform),
+				Data:     data,
+			})
+			return nil
+		} else if errors.Is(err, abstract.NotAnIPIPlatform) {
+			return errors.Errorf("cannot create the cluster because %q is a UPI platform", platform)
+		} else {
+			return err
+		}
 	}
 
 	switch platform {
@@ -442,58 +459,6 @@ func (t *TerraformVariables) Generate(parents asset.Parents) error {
 			string(*rhcosImage),
 			ironicCreds.Username,
 			ironicCreds.Password,
-		)
-		if err != nil {
-			return errors.Wrapf(err, "failed to get %s Terraform variables", platform)
-		}
-		t.FileList = append(t.FileList, &asset.File{
-			Filename: fmt.Sprintf(TfPlatformVarsFileName, platform),
-			Data:     data,
-		})
-	case ovirt.Name:
-		config, err := ovirtconfig.NewConfig()
-		if err != nil {
-			return err
-		}
-		con, err := ovirtconfig.NewConnection()
-		if err != nil {
-			return err
-		}
-		defer con.Close()
-
-		if installConfig.Config.Platform.Ovirt.VNICProfileID == "" {
-			profiles, err := ovirtconfig.FetchVNICProfileByClusterNetwork(
-				con,
-				installConfig.Config.Platform.Ovirt.ClusterID,
-				installConfig.Config.Platform.Ovirt.NetworkName)
-			if err != nil {
-				return errors.Wrapf(err, "failed to compute values for Engine platform")
-			}
-			if len(profiles) != 1 {
-				return errors.Wrapf(err, "failed to compute values for Engine platform, there are multiple vNIC profiles.")
-			}
-			installConfig.Config.Platform.Ovirt.VNICProfileID = profiles[0].MustId()
-		}
-
-		masters, err := mastersAsset.Machines()
-		if err != nil {
-			return err
-		}
-
-		data, err := ovirttfvars.TFVars(
-			ovirttfvars.Auth{
-				URL:      config.URL,
-				Username: config.Username,
-				Password: config.Password,
-				Cafile:   config.CAFile,
-			},
-			installConfig.Config.Platform.Ovirt.ClusterID,
-			installConfig.Config.Platform.Ovirt.StorageDomainID,
-			installConfig.Config.Platform.Ovirt.NetworkName,
-			installConfig.Config.Platform.Ovirt.VNICProfileID,
-			string(*rhcosImage),
-			clusterID.InfraID,
-			masters[0].Spec.ProviderSpec.Value.Object.(*ovirtprovider.OvirtMachineProviderSpec),
 		)
 		if err != nil {
 			return errors.Wrapf(err, "failed to get %s Terraform variables", platform)

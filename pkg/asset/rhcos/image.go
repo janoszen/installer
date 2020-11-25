@@ -96,6 +96,7 @@ func osImage(config *types.InstallConfig) (string, error) {
 		}
 		osimage, err = rhcos.OpenStack(ctx, arch)
 	case ovirt.Name:
+		// TODO extract to platformv2 API
 		osimage, err = rhcos.OpenStack(ctx, arch)
 	case azure.Name:
 		osimage, err = rhcos.VHD(ctx, arch)

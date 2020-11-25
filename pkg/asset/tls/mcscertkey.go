@@ -52,6 +52,7 @@ func (a *MCSCertKey) Generate(dependencies asset.Parents) error {
 		cfg.IPAddresses = []net.IP{net.ParseIP(installConfig.Config.OpenStack.APIVIP)}
 		cfg.DNSNames = []string{hostname, installConfig.Config.OpenStack.APIVIP}
 	case ovirttypes.Name:
+		// TODO extract to platformv2 API
 		cfg.IPAddresses = []net.IP{net.ParseIP(installConfig.Config.Ovirt.APIVIP)}
 		cfg.DNSNames = []string{hostname, installConfig.Config.Ovirt.APIVIP}
 	case vspheretypes.Name:

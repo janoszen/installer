@@ -31,6 +31,7 @@ func (a *CloudProviderCABundle) Generate(deps asset.Parents) error {
 		return nil
 	}
 	if ic.Config.Platform.Name() != awstypes.Name {
+		// TODO extract to platformv2 API
 		return nil
 	}
 	if !awstypes.C2SRegions.Has(ic.Config.Platform.AWS.Region) {

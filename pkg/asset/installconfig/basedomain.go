@@ -35,6 +35,7 @@ func (a *baseDomain) Generate(parents asset.Parents) error {
 
 	var err error
 	switch platform.CurrentName() {
+	// TODO extract to platformv2 API
 	case aws.Name:
 		a.BaseDomain, err = awsconfig.GetBaseDomain()
 		cause := errors.Cause(err)

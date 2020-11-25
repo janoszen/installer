@@ -61,6 +61,7 @@ func (cpm *ClusterPlatformMetadata) Platform() string {
 		return "baremetal"
 	}
 	if cpm.Ovirt != nil {
+		// TODO extract to platformv2 API
 		return ovirt.Name
 	}
 	if cpm.VSphere != nil {

@@ -82,6 +82,7 @@ func (c *Cluster) Generate(parents asset.Parents) (err error) {
 
 	logrus.Infof("Creating infrastructure resources...")
 	switch installConfig.Config.Platform.Name() {
+	// TODO extract to platformv2 API
 	case typesaws.Name:
 		if err := aws.PreTerraform(context.TODO(), clusterID.InfraID, installConfig); err != nil {
 			return err

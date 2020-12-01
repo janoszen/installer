@@ -8,8 +8,8 @@ import (
 	"github.com/ovirt/go-ovirt"
 	"github.com/sirupsen/logrus"
 
-	"github.com/openshift/installer/pkg/asset/installconfig/ovirt"
 	"github.com/openshift/installer/pkg/destroy/providers"
+	"github.com/openshift/installer/pkg/platformv2/platforms/ovirt/installconfig"
 	"github.com/openshift/installer/pkg/types"
 )
 
@@ -21,7 +21,7 @@ type ClusterUninstaller struct {
 
 // Run is the entrypoint to start the uninstall process.
 func (uninstaller *ClusterUninstaller) Run() error {
-	con, err := ovirt.NewConnection()
+	con, err := installconfig.NewConnection()
 	if err != nil {
 		return fmt.Errorf("failed to initialize connection to ovirt-engine's %s", err)
 	}

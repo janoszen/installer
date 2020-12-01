@@ -14,7 +14,6 @@ import (
 	"github.com/openshift/installer/pkg/asset"
 	"github.com/openshift/installer/pkg/asset/installconfig"
 	"github.com/openshift/installer/pkg/asset/installconfig/gcp"
-	"github.com/openshift/installer/pkg/asset/installconfig/ovirt"
 	"github.com/openshift/installer/pkg/asset/machines"
 	osmachine "github.com/openshift/installer/pkg/asset/machines/openstack"
 	openstackmanifests "github.com/openshift/installer/pkg/asset/manifests/openstack"
@@ -22,6 +21,7 @@ import (
 	"github.com/openshift/installer/pkg/asset/password"
 	"github.com/openshift/installer/pkg/asset/rhcos"
 	"github.com/openshift/installer/pkg/asset/templates/content/openshift"
+	ovirtconfig "github.com/openshift/installer/pkg/platformv2/platforms/ovirt/installconfig"
 	"github.com/openshift/installer/pkg/types"
 	awstypes "github.com/openshift/installer/pkg/types/aws"
 	azuretypes "github.com/openshift/installer/pkg/types/azure"
@@ -167,7 +167,7 @@ func (o *Openshift) Generate(dependencies asset.Parents) error {
 			},
 		}
 	case ovirttypes.Name:
-		conf, err := ovirt.NewConfig()
+		conf, err := ovirtconfig.NewConfig()
 		if err != nil {
 			return err
 		}

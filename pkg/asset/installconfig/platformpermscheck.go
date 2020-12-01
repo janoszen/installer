@@ -9,14 +9,14 @@ import (
 	"github.com/openshift/installer/pkg/asset"
 	awsconfig "github.com/openshift/installer/pkg/asset/installconfig/aws"
 	gcpconfig "github.com/openshift/installer/pkg/asset/installconfig/gcp"
+	"github.com/openshift/installer/pkg/platformv2/platformv2errors"
+	"github.com/openshift/installer/pkg/platformv2/platformv2registry"
 	"github.com/openshift/installer/pkg/types/aws"
 	"github.com/openshift/installer/pkg/types/azure"
 	"github.com/openshift/installer/pkg/types/baremetal"
 	"github.com/openshift/installer/pkg/types/gcp"
 	"github.com/openshift/installer/pkg/types/libvirt"
-	"github.com/openshift/installer/pkg/types/none"
 	"github.com/openshift/installer/pkg/types/openstack"
-	"github.com/openshift/installer/pkg/types/ovirt"
 	"github.com/openshift/installer/pkg/types/vsphere"
 )
 
@@ -46,6 +46,14 @@ func (a *PlatformPermsCheck) Generate(dependencies asset.Parents) error {
 
 	var err error
 	platform := ic.Config.Platform.Name()
+
+	p, err := platformv2registry.GetByName(platform)
+	if err == nil {
+		return p.PlatformPermsCheck(ic.Config, ic.File, ic.AWS, ic.Azure)
+	} else if !errors.Is(err, platformv2errors.ErrPlatformNotRegistered) {
+		return err
+	}
+
 	switch platform {
 	case aws.Name:
 		permissionGroups := []awsconfig.PermissionGroup{awsconfig.PermissionCreateBase}
@@ -83,7 +91,7 @@ func (a *PlatformPermsCheck) Generate(dependencies asset.Parents) error {
 		if err = gcpconfig.ValidateEnabledServices(ctx, client, ic.Config.GCP.ProjectID); err != nil {
 			return errors.Wrap(err, "failed to validate services in this project")
 		}
-	case azure.Name, baremetal.Name, libvirt.Name, none.Name, openstack.Name, ovirt.Name, vsphere.Name:
+	case azure.Name, baremetal.Name, libvirt.Name, openstack.Name, vsphere.Name:
 		// no permissions to check
 	default:
 		err = fmt.Errorf("unknown platform type %q", platform)

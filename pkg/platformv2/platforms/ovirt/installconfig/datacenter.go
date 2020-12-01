@@ -1,4 +1,4 @@
-package ovirt
+package installconfig
 
 import (
 	ovirtsdk4 "github.com/ovirt/go-ovirt"

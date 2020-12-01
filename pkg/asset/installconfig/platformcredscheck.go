@@ -9,15 +9,14 @@ import (
 	"github.com/openshift/installer/pkg/asset"
 	gcpconfig "github.com/openshift/installer/pkg/asset/installconfig/gcp"
 	openstackconfig "github.com/openshift/installer/pkg/asset/installconfig/openstack"
-	ovirtconfig "github.com/openshift/installer/pkg/asset/installconfig/ovirt"
+	"github.com/openshift/installer/pkg/platformv2/platformv2errors"
+	"github.com/openshift/installer/pkg/platformv2/platformv2registry"
 	"github.com/openshift/installer/pkg/types/aws"
 	"github.com/openshift/installer/pkg/types/azure"
 	"github.com/openshift/installer/pkg/types/baremetal"
 	"github.com/openshift/installer/pkg/types/gcp"
 	"github.com/openshift/installer/pkg/types/libvirt"
-	"github.com/openshift/installer/pkg/types/none"
 	"github.com/openshift/installer/pkg/types/openstack"
-	"github.com/openshift/installer/pkg/types/ovirt"
 	"github.com/openshift/installer/pkg/types/vsphere"
 )
 
@@ -41,8 +40,15 @@ func (a *PlatformCredsCheck) Generate(dependencies asset.Parents) error {
 	ic := &InstallConfig{}
 	dependencies.Get(ic)
 
-	var err error
 	platform := ic.Config.Platform.Name()
+
+	p, err := platformv2registry.GetByName(platform)
+	if err == nil {
+		return p.PlatformCredsCheck(ic.Config, ic.File, ic.AWS, ic.Azure)
+	} else if !errors.Is(err, platformv2errors.ErrPlatformNotRegistered) {
+		return err
+	}
+
 	switch platform {
 	case aws.Name:
 		_, err := ic.AWS.Session(ctx)
@@ -59,21 +65,12 @@ func (a *PlatformCredsCheck) Generate(dependencies asset.Parents) error {
 		if err != nil {
 			return errors.Wrap(err, "creating OpenStack session")
 		}
-	case baremetal.Name, libvirt.Name, none.Name, vsphere.Name:
+	case baremetal.Name, libvirt.Name, vsphere.Name:
 		// no creds to check
 	case azure.Name:
 		_, err = ic.Azure.Session()
 		if err != nil {
 			return errors.Wrap(err, "creating Azure session")
-		}
-	case ovirt.Name:
-		con, err := ovirtconfig.NewConnection()
-		if err != nil {
-			return errors.Wrap(err, "creating Engine connection")
-		}
-		err = con.Test()
-		if err != nil {
-			return errors.Wrap(err, "testing Engine connection")
 		}
 	default:
 		err = fmt.Errorf("unknown platform type %q", platform)

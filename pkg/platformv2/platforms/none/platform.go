@@ -2,6 +2,7 @@ package none
 
 import (
 	"github.com/openshift/installer/pkg/platformv2"
+	"github.com/openshift/installer/pkg/platformv2/platformv2errors"
 	"github.com/openshift/installer/pkg/types/none"
 )
 
@@ -17,5 +18,5 @@ func (p *nonePlatform) SupportsIPI() bool {
 }
 
 func (p *nonePlatform) GetIPI() (platformv2.IPIPlatform, error) {
-	return nil, platformv2.ErrPlatformDoesNotSupportIPI
+	return nil, platformv2errors.ErrPlatformDoesNotSupportIPI
 }

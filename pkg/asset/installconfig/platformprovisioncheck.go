@@ -2,6 +2,7 @@ package installconfig
 
 import (
 	"context"
+	"errors"
 	"fmt"
 
 	"github.com/openshift/installer/pkg/asset"
@@ -9,14 +10,14 @@ import (
 	bmconfig "github.com/openshift/installer/pkg/asset/installconfig/baremetal"
 	gcpconfig "github.com/openshift/installer/pkg/asset/installconfig/gcp"
 	vsconfig "github.com/openshift/installer/pkg/asset/installconfig/vsphere"
+	"github.com/openshift/installer/pkg/platformv2/platformv2errors"
+	"github.com/openshift/installer/pkg/platformv2/platformv2registry"
 	"github.com/openshift/installer/pkg/types/aws"
 	"github.com/openshift/installer/pkg/types/azure"
 	"github.com/openshift/installer/pkg/types/baremetal"
 	"github.com/openshift/installer/pkg/types/gcp"
 	"github.com/openshift/installer/pkg/types/libvirt"
-	"github.com/openshift/installer/pkg/types/none"
 	"github.com/openshift/installer/pkg/types/openstack"
-	"github.com/openshift/installer/pkg/types/ovirt"
 	"github.com/openshift/installer/pkg/types/vsphere"
 )
 
@@ -41,6 +42,14 @@ func (a *PlatformProvisionCheck) Generate(dependencies asset.Parents) error {
 
 	var err error
 	platform := ic.Config.Platform.Name()
+
+	p, err := platformv2registry.GetByName(platform)
+	if err == nil {
+		return p.PlatformProvisionCheck(ic.Config, ic.File, ic.AWS, ic.Azure)
+	} else if !errors.Is(err, platformv2errors.ErrPlatformNotRegistered) {
+		return err
+	}
+
 	switch platform {
 	case azure.Name:
 		dnsConfig, err := ic.Azure.DNSConfig()
@@ -75,7 +84,7 @@ func (a *PlatformProvisionCheck) Generate(dependencies asset.Parents) error {
 		if err != nil {
 			return err
 		}
-	case aws.Name, libvirt.Name, none.Name, openstack.Name, ovirt.Name:
+	case aws.Name, libvirt.Name, openstack.Name:
 		// no special provisioning requirements to check
 	default:
 		err = fmt.Errorf("unknown platform type %q", platform)
